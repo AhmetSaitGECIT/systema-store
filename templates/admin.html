@@ -21,6 +21,7 @@
                 <h5 class="mb-3">📦 İlan Ekle</h5>
                 <form method="POST">
                     <input type="hidden" name="add_product" value="1">
+                    
                     <div class="row">
                         <div class="col"><input type="text" name="name" class="form-control mb-2" placeholder="Ürün Adı" required></div>
                         <div class="col">
@@ -31,15 +32,29 @@
                             </select>
                         </div>
                     </div>
+
                     <div class="row">
-                        <div class="col"><input type="number" name="price" class="form-control mb-2" placeholder="Fiyat" required></div>
+                        <div class="col">
+                            <label class="small text-muted fw-bold">Satış Fiyatı</label>
+                            <input type="number" name="price" class="form-control mb-2" placeholder="Örn: 500" required>
+                        </div>
+                        <div class="col">
+                            <label class="small text-muted fw-bold">İndirimsiz (Eski) Fiyat</label>
+                            <input type="number" name="old_price" class="form-control mb-2" placeholder="Örn: 1000" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
                         <div class="col"><input type="text" name="link" class="form-control mb-2" placeholder="Link" required></div>
                     </div>
+                    
                     <input type="text" name="image" class="form-control mb-2" placeholder="Resim URL" required>
+                    
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="is_follower" id="f">
                         <label class="form-check-label" for="f">Bu Takipçi İlanıdır</label>
                     </div>
+                    
                     <button class="btn btn-dark w-100">YAYINLA</button>
                 </form>
             </div>
