@@ -1,6 +1,6 @@
 import sqlite3
 import datetime
-import os  # BU ÇOK ÖNEMLİ, EKLENDİ
+import os
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, session
 
@@ -9,7 +9,6 @@ app.secret_key = 'systema_ultra_secure_key'
 app.permanent_session_lifetime = timedelta(days=30) 
 
 # --- VERİTABANI YOLUNU GARANTİYE ALMA ---
-# Bu kısım sunucuda dosyanın tam yerini bulur.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'systema_final_v5.db')
 
@@ -21,7 +20,7 @@ def get_db():
 def init_db():
     conn = get_db()
     c = conn.cursor()
-    # Tabloları oluştur
+    # Tablolar
     c.execute('''CREATE TABLE IF NOT EXISTS products 
                  (id INTEGER PRIMARY KEY, name TEXT, price REAL, old_price REAL, 
                   image TEXT, category TEXT, link TEXT, installment TEXT, 
@@ -35,7 +34,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS categories 
                  (id INTEGER PRIMARY KEY, name TEXT)''')
     
-    # Varsayılan kategorileri ekle
+    # Varsayılan kategoriler
     c.execute("SELECT count(*) FROM categories")
     if c.fetchone()[0] == 0:
         default_cats = ["Oyun / Key", "Hazır Sistem", "Laptop", "Playstation", "Xbox", 
@@ -49,8 +48,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- SİTE BAŞLARKEN OTOMATİK ÇALIŞTIR ---
-# Bu satır sayesinde Gunicorn ile başlatsan bile tablolar kurulur!
+# Otomatik Başlatma
 with app.app_context():
     init_db()
 
@@ -81,7 +79,6 @@ def home():
 
     products = conn.execute(query, params).fetchall()
     
-    # HATA OLMAMASI İÇİN TABLOLARIN BOŞ OLUP OLMADIĞINI KONTROL ET
     try:
         news = conn.execute("SELECT * FROM news ORDER BY id DESC LIMIT 5").fetchall()
         ad = conn.execute("SELECT * FROM ads ORDER BY id DESC LIMIT 1").fetchone()
@@ -128,13 +125,17 @@ def admin():
         if 'add_product' in request.form:
             name = request.form['name']
             price = request.form['price']
+            old_price = request.form['old_price'] # YENİ: Elle girilen eski fiyatı alıyoruz
             img = request.form['image']
             cat = request.form['category']
             link = request.form['link']
             is_follower = 1 if 'is_follower' in request.form else 0
+            
+            # YENİ: Veritabanına old_price'ı direkt kaydediyoruz (Hesaplama yok)
             conn.execute("INSERT INTO products (name, price, old_price, image, category, link, installment, is_follower, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                         (name, price, float(price)*1.2, img, cat, link, "Fırsat Ürünü", is_follower, datetime.datetime.now()))
+                         (name, price, old_price, img, cat, link, "Fırsat Ürünü", is_follower, datetime.datetime.now()))
             conn.commit()
+        
         elif 'add_news' in request.form:
             conn.execute("INSERT INTO news (title, content, date) VALUES (?,?,?)",
                          (request.form['title'], request.form['content'], datetime.datetime.now().strftime("%d.%m")))
@@ -175,6 +176,7 @@ def edit(id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     conn = get_db()
     if request.method == 'POST':
+        # Edit kısmını da belki ileride old_price eklemek istersin ama şimdilik bozmayalım
         conn.execute("UPDATE products SET name=?, price=?, image=?, link=? WHERE id=?",
                      (request.form['name'], request.form['price'], request.form['image'], request.form['link'], id))
         conn.commit()
@@ -185,6 +187,4 @@ def edit(id):
     return render_template('edit.html', p=product)
 
 if __name__ == '__main__':
-    # BU KISIM ARTIK SADECE LOCALDE ÇALIŞIRKEN LAZIM
-    # GUNICORN KULLANIRKEN YUKARIDAKİ 'with app.app_context()' ÇALIŞACAK
     app.run(debug=True)
