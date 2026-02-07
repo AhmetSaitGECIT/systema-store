@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+import os  # BU ÇOK ÖNEMLİ, EKLENDİ
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, session
 
@@ -7,33 +8,34 @@ app = Flask(__name__)
 app.secret_key = 'systema_ultra_secure_key'
 app.permanent_session_lifetime = timedelta(days=30) 
 
+# --- VERİTABANI YOLUNU GARANTİYE ALMA ---
+# Bu kısım sunucuda dosyanın tam yerini bulur.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'systema_final_v5.db')
+
 def get_db():
-    conn = sqlite3.connect('systema_final_v5.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
     conn = get_db()
     c = conn.cursor()
-    # Ürünler
+    # Tabloları oluştur
     c.execute('''CREATE TABLE IF NOT EXISTS products 
                  (id INTEGER PRIMARY KEY, name TEXT, price REAL, old_price REAL, 
                   image TEXT, category TEXT, link TEXT, installment TEXT, 
                   is_follower INTEGER DEFAULT 0, created_at TIMESTAMP)''')
-    # Haberler
     c.execute('''CREATE TABLE IF NOT EXISTS news 
                  (id INTEGER PRIMARY KEY, title TEXT, content TEXT, date TEXT)''')
-    # İstekler
     c.execute('''CREATE TABLE IF NOT EXISTS requests 
                  (id INTEGER PRIMARY KEY, username TEXT, message TEXT, date TEXT)''')
-    # Reklamlar
     c.execute('''CREATE TABLE IF NOT EXISTS ads 
                  (id INTEGER PRIMARY KEY, image TEXT, link TEXT)''')
-    # KATEGORİLER (YENİ)
     c.execute('''CREATE TABLE IF NOT EXISTS categories 
                  (id INTEGER PRIMARY KEY, name TEXT)''')
     
-    # EĞER KATEGORİ YOKSA SENİN LİSTENİ OTOMATİK EKLE
+    # Varsayılan kategorileri ekle
     c.execute("SELECT count(*) FROM categories")
     if c.fetchone()[0] == 0:
         default_cats = ["Oyun / Key", "Hazır Sistem", "Laptop", "Playstation", "Xbox", 
@@ -47,6 +49,11 @@ def init_db():
     conn.commit()
     conn.close()
 
+# --- SİTE BAŞLARKEN OTOMATİK ÇALIŞTIR ---
+# Bu satır sayesinde Gunicorn ile başlatsan bile tablolar kurulur!
+with app.app_context():
+    init_db()
+
 @app.route('/')
 def home():
     conn = get_db()
@@ -54,7 +61,6 @@ def home():
     conn.execute("DELETE FROM products WHERE created_at < ?", (limit,))
     conn.commit()
     
-    # FİLTRELEME & SIRALAMA
     sort_by = request.args.get('sort', 'default')
     min_price = request.args.get('min')
     max_price = request.args.get('max')
@@ -74,11 +80,17 @@ def home():
     else: query += " ORDER BY is_follower DESC, id DESC"
 
     products = conn.execute(query, params).fetchall()
-    news = conn.execute("SELECT * FROM news ORDER BY id DESC LIMIT 5").fetchall()
-    ad = conn.execute("SELECT * FROM ads ORDER BY id DESC LIMIT 1").fetchone()
-    # Kategorileri çek
-    categories = conn.execute("SELECT * FROM categories").fetchall()
     
+    # HATA OLMAMASI İÇİN TABLOLARIN BOŞ OLUP OLMADIĞINI KONTROL ET
+    try:
+        news = conn.execute("SELECT * FROM news ORDER BY id DESC LIMIT 5").fetchall()
+        ad = conn.execute("SELECT * FROM ads ORDER BY id DESC LIMIT 1").fetchone()
+        categories = conn.execute("SELECT * FROM categories").fetchall()
+    except:
+        news = []
+        ad = None
+        categories = []
+
     conn.close()
     return render_template('index.html', products=products, news=news, ad=ad, categories=categories)
 
@@ -113,7 +125,6 @@ def admin():
     conn = get_db()
     
     if request.method == 'POST':
-        # ÜRÜN EKLE
         if 'add_product' in request.form:
             name = request.form['name']
             price = request.form['price']
@@ -124,21 +135,16 @@ def admin():
             conn.execute("INSERT INTO products (name, price, old_price, image, category, link, installment, is_follower, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                          (name, price, float(price)*1.2, img, cat, link, "Fırsat Ürünü", is_follower, datetime.datetime.now()))
             conn.commit()
-        # HABER EKLE
         elif 'add_news' in request.form:
             conn.execute("INSERT INTO news (title, content, date) VALUES (?,?,?)",
                          (request.form['title'], request.form['content'], datetime.datetime.now().strftime("%d.%m")))
             conn.commit()
-        # REKLAM EKLE
         elif 'add_ad' in request.form:
             conn.execute("INSERT INTO ads (image, link) VALUES (?,?)", (request.form['image'], request.form['link']))
             conn.commit()
-        # KATEGORİ EKLE (YENİ)
         elif 'add_cat' in request.form:
             conn.execute("INSERT INTO categories (name) VALUES (?)", (request.form['cat_name'],))
             conn.commit()
-        
-        # SİLME İŞLEMLERİ
         elif 'delete' in request.form:
             conn.execute("DELETE FROM products WHERE id = ?", (request.form['id'],))
             conn.commit()
@@ -179,5 +185,6 @@ def edit(id):
     return render_template('edit.html', p=product)
 
 if __name__ == '__main__':
-    init_db()
+    # BU KISIM ARTIK SADECE LOCALDE ÇALIŞIRKEN LAZIM
+    # GUNICORN KULLANIRKEN YUKARIDAKİ 'with app.app_context()' ÇALIŞACAK
     app.run(debug=True)
